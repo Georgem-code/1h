@@ -69,6 +69,10 @@ class TM1638:
         if led < 0 or led >= 8:
            return
         self.sendData((led << 1) + 1, 0x01 if state else 0x00)
+
+    def clearLeds(self):
+    for i in range(8):
+        self.displayLed(i, False)
     
     #def displayNumber(self, number):
       #  for i in range(8):
