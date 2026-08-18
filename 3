@@ -1,0 +1,179 @@
+from machine import Pin 
+import time 
+import random 
+ 
+ 
+class TM1940: 
+    def __init__(self, stb_pin, clk_pin, dio_pin): 
+        self._stb = Pin(stb_pin, Pin.OUT) 
+        self._clk = Pin(clk_pin, Pin.OUT) 
+        self._dio = Pin(dio_pin, Pin.OUT) 
+ 
+        self.digit = [0] * 8 
+ 
+        self.digitToSegment = [ 
+            0x3F, 0x06, 0x5B, 0x4F, 0x66, 
+            0x6D, 0x7D, 0x07, 0x7F, 0x6F 
+        ] 
+ 
+        self.segmentos = { 
+            "H": 0x76, 
+            "O": 0x3F, 
+            "L": 0x38, 
+            "A": 0x77, 
+            "G": 0x7D, 
+            "!": 0x86, 
+            "F": 0x31, 
+            "I": 0x06 
+        } 
+ 
+    def init(self): 
+        self.clearDisplay() 
+        self.setBrightness(7) 
+        mensaje="GO!"  
+ 
+        for i in range (3): 
+            data=self.digitToSegment[3-i] 
+            adress=i*2 
+            self.sendData(adress,data) 
+            time.sleep_ms(1000) 
+            self.clearDisplay() 
+            time.sleep_ms(1000) 
+        self.inicio=time.ticks_ms()     
+        self.contador() 
+     
+    def readKeys(self): 
+         
+        self._stb.off() 
+        self.sendByte(0x42) 
+        self._dio.init(Pin.IN) 
+        value = 0 
+         
+        for i in range(8): 
+            bit = self._dio.value() 
+            value = (value << 1) | bit 
+ 
+            self._clk.on() 
+            time.sleep_us(1) 
+            self._clk.off() 
+            time.sleep_us(1) 
+ 
+        self._dio.init(Pin.OUT) 
+        self._stb.on() 
+        return value 
+     
+    def contador(self): 
+     
+        self.clearDisplay() 
+        self.setBrightness(7) 
+        mensaje = "GO!" 
+     
+        nale = random.randint(0, 10000) 
+        print(nale / 1000) 
+     
+        m = self.inicio + nale 
+        ahora = time.ticks_ms() 
+     
+        contador = 0 
+        anterior = 0 
+        ultima = 0 
+         
+        while m > ahora: 
+          actual = self.readKeys() 
+          if anterior == 0 and actual == 128: 
+                ahora = time.ticks_ms() 
+                tiempo = time.ticks_diff(ahora, ultima) 
+             
+                if tiempo >= 50: 
+                    contador = contador + 1 
+                    print(contador) 
+                    ultima = ahora 
+                    mensaje1 = "FAIL" 
+                    for i, let in enumerate(mensaje1): 
+                        data = self.segmentos[let] 
+                        address = i * 2 
+                        self.sendData(address, data) 
+                         
+          anterior = actual 
+          ahora = time.ticks_ms() 
+ 
+        for i, letra in enumerate(mensaje): 
+         data = self.segmentos[letra] 
+         address = i * 2 
+         self.sendData(address, data) 
+         
+        go = time.ticks_ms() 
+     
+        while True: 
+            actual = self.readKeys() 
+     
+            if anterior == 0 and actual == 128: 
+             
+                ahora = time.ticks_ms() 
+                tiempo = time.ticks_diff(ahora, ultima) 
+             
+                if tiempo >= 50: 
+                    contador = contador + 1 
+                    print(contador) 
+                    ultima = ahora 
+                 
+                    reaccion = time.ticks_diff(ahora, go) 
+                    reaccion1 = str(reaccion) 
+                 
+                for i, digito in enumerate(reaccion1): 
+                    data = self.digitToSegment[int(digito)] 
+                    adress = i * 2 
+                    self.sendData(adress, data) 
+ 
+        anterior = actual 
+         
+     
+    def clearDisplay(self): 
+        for i in range(8): 
+            self.displayDigit(i, 0x00) 
+ 
+    def setBrightness(self, brightness): 
+        if brightness > 7: 
+            brightness = 7 
+ 
+        if brightness < 0: 
+            brightness = 0 
+ 
+        command = 0x88 | brightness 
+        self.sendCommand(command) 
+ 
+    def displayDigit(self, position, data): 
+        if position < 0 or position >= 8: 
+            return 
+ 
+        self.digit[position] = data 
+        self.sendData(position << 1, self.digit[position]) 
+         
+    def sendCommand(self, command): 
+        self._stb.off() 
+        self.sendByte(command) 
+        self._stb.on() 
+ 
+    def sendData(self, address, data): 
+        self.sendCommand(0x44) 
+ 
+        self._stb.off() 
+ 
+        self.sendByte(0xC0 | address) 
+        self.sendByte(data) 
+ 
+        self._stb.on() 
+ 
+    def sendByte(self, data): 
+        for i in range(8): 
+            self._dio.value(data & 0x01) 
+ 
+            time.sleep_us(1) 
+ 
+            self._clk.on() 
+            time.sleep_us(1) 
+ 
+            self._clk.off() 
+            time.sleep_us(1) 
+ 
+            data >>= 1 
